@@ -17,13 +17,11 @@ vCluster Platform Apps and Grafana dashboards for monitoring vclusters with priv
 | `vcluster-prv-dashboard-big.json` | Prometheus format (vmagent, otel-prometheus) | Full: kubelet, cAdvisor, API server |
 | `vcluster-prv-dashboard-small.json` | OTel format (otel-otlp) | kubeletstats only |
 
-## Configuration
+### OTel Dashboard
+![OTel Dashboard](images/dashboard-otlp.png)
 
-Available parameters when deploying:
-- `prometheus.endpoint` - Required: Prometheus remote write endpoint (e.g., `http://prometheus:9090`)
-- `prometheus.insecure` - Skip TLS verification (boolean)
-- `prometheus.username` - Basic auth username
-- `prometheus.password` - Basic auth password
+### Prometheus Dashboard
+![Prometheus Dashboard](images/dashboard-prometheus.png)
 
 ## Notes
 
