@@ -86,11 +86,11 @@ spec:
               receivers:
               - kubeletstats
               processors:
-              - batch
               - memory_limiter
               - k8sattributes
               - attributes
               - transform
+              - batch
               exporters:
               - otlphttp/prometheus
   defaultNamespace: monitoring

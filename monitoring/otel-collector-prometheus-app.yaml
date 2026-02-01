@@ -176,10 +176,10 @@ spec:
               receivers:
               - prometheus
               processors:
-              - batch
               - memory_limiter
               - k8sattributes
               - transform
+              - batch
               exporters:
               - prometheusremotewrite
   defaultNamespace: monitoring
