@@ -59,7 +59,7 @@ spec:
                     - role: node
                   scheme: https
                   tls_config:
-                    insecure_skip_verify: true
+                    insecure_skip_verify: {{ .Values.prometheus.insecure }}
                   authorization:
                     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
                   relabel_configs:
@@ -81,7 +81,7 @@ spec:
                     - role: node
                   scheme: https
                   tls_config:
-                    insecure_skip_verify: true
+                    insecure_skip_verify: {{ .Values.prometheus.insecure }}
                   authorization:
                     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
                   metrics_path: /metrics/cadvisor
@@ -107,7 +107,7 @@ spec:
                   scheme: https
                   tls_config:
                     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-                    insecure_skip_verify: false
+                    insecure_skip_verify: {{ .Values.prometheus.insecure }}
                   authorization:
                     credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
                   relabel_configs:

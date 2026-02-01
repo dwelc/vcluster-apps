@@ -32,7 +32,7 @@ spec:
       config:
         receivers:
           kubeletstats:
-            insecure_skip_verify: true
+            insecure_skip_verify: "{{ .Values.prometheus.insecure }}"
         processors:
           attributes:
             actions:
