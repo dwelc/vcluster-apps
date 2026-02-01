@@ -1,0 +1,140 @@
+apiVersion: management.loft.sh/v1
+kind: App
+metadata:
+  name: vmagent
+spec:
+  access:
+  - users:
+    - '*'
+    verbs:
+    - get
+  config:
+    chart:
+      name: victoria-metrics-agent
+      repoURL: https://victoriametrics.github.io/helm-charts/
+      version: "0.19.0"
+    values: |
+      mode: daemonSet
+
+      # Inject node name for local-only scraping
+      env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+
+      # Remote write to central Prometheus
+      remoteWrite:
+        - url: "{{ .Values.prometheus.endpoint }}/api/v1/write"
+          urlRelabelConfig:
+            - action: replace
+              replacement: "{{ .Values.loft.cluster }}"
+              target_label: cluster
+            - action: replace
+              replacement: "{{ .Values.loft.project }}"
+              target_label: loft_project_name
+            - action: replace
+              replacement: "{{ .Values.loft.name }}"
+              target_label: loft_virtualcluster_name
+            - action: replace
+              replacement: "{{ .Values.loft.user.name }}"
+              target_label: loft_user_name
+
+      # RBAC for kubelet/cadvisor/apiserver access
+      rbac:
+        create: true
+        namespaced: false
+        extraRules:
+          - apiGroups: [""]
+            resources: ["nodes/metrics"]
+            verbs: ["get"]
+          - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+            verbs: ["get"]
+
+      # Scrape configs with local node filtering
+      config:
+        global:
+          scrape_interval: 30s
+        scrape_configs:
+          - job_name: 'kubelet'
+            kubernetes_sd_configs:
+              - role: node
+            scheme: https
+            tls_config:
+              insecure_skip_verify: true
+            authorization:
+              credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            relabel_configs:
+              # Only scrape the node this pod is running on
+              - source_labels: [__meta_kubernetes_node_name]
+                regex: "%{KUBE_NODE_NAME}"
+                action: keep
+              - source_labels: [__meta_kubernetes_node_address_InternalIP]
+                target_label: __address__
+                replacement: ${1}:10250
+              - action: labelmap
+                regex: __meta_kubernetes_node_label_(.+)
+              - source_labels: [__meta_kubernetes_node_name]
+                target_label: node
+
+          - job_name: 'kubelet-cadvisor'
+            kubernetes_sd_configs:
+              - role: node
+            scheme: https
+            tls_config:
+              insecure_skip_verify: true
+            authorization:
+              credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            metrics_path: /metrics/cadvisor
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_node_name]
+                regex: "%{KUBE_NODE_NAME}"
+                action: keep
+              - source_labels: [__meta_kubernetes_node_address_InternalIP]
+                target_label: __address__
+                replacement: ${1}:10250
+              - action: labelmap
+                regex: __meta_kubernetes_node_label_(.+)
+              - source_labels: [__meta_kubernetes_node_name]
+                target_label: node
+
+          - job_name: 'apiserver'
+            kubernetes_sd_configs:
+              - role: endpoints
+                namespaces:
+                  names: ['default']
+            scheme: https
+            tls_config:
+              ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              insecure_skip_verify: false
+            authorization:
+              credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+                action: keep
+                regex: kubernetes;https
+  defaultNamespace: monitoring
+  description: |
+    VictoriaMetrics vmagent deployed as DaemonSet for local node metric scraping.
+    Scrapes kubelet /metrics, cAdvisor /metrics/cadvisor, and API server /metrics.
+    Uses Prometheus metric naming conventions. Pairs with vcluster-prv-dashboard-big.json.
+  displayName: VictoriaMetrics Agent
+  icon: https://victoriametrics.com/favicon.ico
+  parameters:
+  - description: The Prometheus remote write endpoint (without /api/v1/write suffix)
+    label: Prometheus Endpoint
+    required: true
+    variable: prometheus.endpoint
+  - description: Username for basic auth (optional)
+    label: Prometheus Username
+    variable: prometheus.username
+  - description: Password for basic auth (optional)
+    label: Prometheus Password
+    type: password
+    variable: prometheus.password
+  - description: Skip TLS verification for Prometheus connection
+    label: Skip TLS Verification
+    type: boolean
+    variable: prometheus.insecure
+  recommendedApp:
+  - virtualcluster
