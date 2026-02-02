@@ -17,7 +17,7 @@ spec:
       ---
       mode: daemonset
       presets:
-        # Disable kubeletMetrics preset - it uses hostname which fails DNS for AWS nodes
+        # Disable kubeletMetrics preset - it uses hostname
         # The prometheus receiver below scrapes kubelet metrics using InternalIP instead
         kubeletMetrics:
           enabled: false
