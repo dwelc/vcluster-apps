@@ -2,4 +2,4 @@
 
 ## monitoring-private-nodes
 
-OTEL and VictorMetrics Apps for local kubelet / API server scrapng
+OTEL and VictoriaMetrics Apps for local kubelet / API server scrapng
