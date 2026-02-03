@@ -1,4 +1,4 @@
-# Repo for vCluster Application manifest
+# Repo for vCluster Application manifests
 
 ## monitoring-private-nodes
 
