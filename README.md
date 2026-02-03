@@ -2,4 +2,4 @@
 
 ## monitoring-private-nodes
 
-Investigation into local kubelet scraping vs API Proxy
+OTEL and VictorMetrics Apps for local kubelet / API server scrapng
