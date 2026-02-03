@@ -29,7 +29,10 @@ spec:
           urlRelabelConfig:
             - action: replace
               replacement: "{{ .Values.loft.cluster }}"
-              target_label: cluster
+              target_label: loft_cluster_name
+            - action: replace
+              replacement: "{{ .Values.loft.space }}"
+              target_label: loft_space_name
             - action: replace
               replacement: "{{ .Values.loft.project }}"
               target_label: loft_project_name

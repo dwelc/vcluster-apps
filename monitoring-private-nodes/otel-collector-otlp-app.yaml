@@ -37,8 +37,11 @@ spec:
           attributes:
             actions:
             - action: upsert
-              key: cluster
+              key: loft_cluster_name
               value: "{{ .Values.loft.cluster }}"
+            - action: upsert
+              key: loft_space_name
+              value: "{{ .Values.loft.space }}"
             - action: upsert
               key: loft_project_name
               value: "{{ .Values.loft.project }}"

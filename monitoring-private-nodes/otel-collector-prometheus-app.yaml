@@ -118,8 +118,11 @@ spec:
           attributes:
             actions:
             - action: upsert
-              key: cluster
+              key: loft_cluster_name
               value: "{{ .Values.loft.cluster }}"
+            - action: upsert
+              key: loft_space_name
+              value: "{{ .Values.loft.space }}"
             - action: upsert
               key: loft_project_name
               value: "{{ .Values.loft.project }}"
@@ -161,7 +164,8 @@ spec:
               insecure_skip_verify: {{ .Values.prometheus.insecure }}
             # Use external_labels for loft labels (simpler than attributes processor for remote write)
             external_labels:
-              cluster: "{{ .Values.loft.cluster }}"
+              loft_cluster_name: "{{ .Values.loft.cluster }}"
+              loft_space_name: "{{ .Values.loft.space }}"
               loft_project_name: "{{ .Values.loft.project }}"
               loft_virtualcluster_name: "{{ .Values.loft.name }}"
               loft_user_name: "{{ .Values.loft.user.name }}"
