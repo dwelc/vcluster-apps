@@ -26,5 +26,5 @@ vCluster Platform Apps and Grafana dashboards for monitoring vclusters with priv
 ## Notes
 
 - Apps deploy as DaemonSets with local-only node scraping (each pod scrapes only its own node)
-- Loft labels (`cluster`, `loft_project_name`, `loft_virtualcluster_name`, `loft_user_name`) are automatically added
+- Loft labels (`loft_cluster_name`, `loft_project_name`, `loft_virtualcluster_name`, `loft_user_name`, `loft_space_name`) are automatically added
 - Prometheus must have `enableRemoteWriteReceiver: true` for remote write apps
