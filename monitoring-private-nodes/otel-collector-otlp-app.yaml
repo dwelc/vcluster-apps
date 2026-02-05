@@ -37,6 +37,9 @@ spec:
               username: "{{ .Values.prometheus.username }}"
               password: "{{ .Values.prometheus.password }}"
       {{- end }}
+        receivers:
+          kubeletstats:
+            insecure_skip_verify: "{{ .Values.prometheus.insecure }}"
         processors:
           attributes:
             actions:
