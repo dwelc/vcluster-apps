@@ -23,14 +23,15 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
 
+      # Basic auth and TLS for remote write
+      extraArgs:
+        remoteWrite.basicAuth.username: "{{ .Values.prometheus.username }}"
+        remoteWrite.basicAuth.password: "{{ .Values.prometheus.password }}"
+        remoteWrite.tlsInsecureSkipVerify: "{{ .Values.prometheus.insecure }}"
+
       # Remote write to central Prometheus
       remoteWrite:
         - url: "{{ .Values.prometheus.endpoint }}/api/v1/write"
-          basicAuth:
-            username: "{{ .Values.prometheus.username }}"
-            password: "{{ .Values.prometheus.password }}"
-          tlsConfig:
-            insecureSkipVerify: "{{ .Values.prometheus.insecure }}"
           urlRelabelConfig:
             - action: replace
               replacement: "{{ .Values.loft.cluster }}"
