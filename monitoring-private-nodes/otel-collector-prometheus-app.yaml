@@ -48,11 +48,13 @@ spec:
         - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
           verbs: ["get"]
       config:
+    {{- if and .Values.prometheus.username .Values.prometheus.password }}
         extensions:
           basicauth/prw:
             client_auth:
               username: "{{ .Values.prometheus.username }}"
               password: "{{ .Values.prometheus.password }}"
+    {{- end }}
         receivers:
           # Using prometheus receiver instead of kubeletstats - it uses InternalIP and bypasses DNS
           prometheus:
@@ -148,8 +150,10 @@ spec:
         exporters:
           prometheusremotewrite:
             endpoint: '{{ .Values.prometheus.endpoint }}/api/v1/write'
+    {{- if and .Values.prometheus.username .Values.prometheus.password }}
             auth:
               authenticator: basicauth/prw
+    {{- end }}
             tls:
               insecure_skip_verify: {{ .Values.prometheus.insecure }}
             # Use external_labels for loft labels (simpler than attributes processor for remote write)
@@ -165,7 +169,9 @@ spec:
         service:
           extensions:
           - health_check
+    {{- if and .Values.prometheus.username .Values.prometheus.password }}
           - basicauth/prw
+    {{- end }}
           pipelines:
             metrics:
               receivers:
