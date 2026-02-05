@@ -30,13 +30,13 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
       config:
-    {{- if and .Values.prometheus.username .Values.prometheus.password }}
+      {{- if and .Values.prometheus.username .Values.prometheus.password }}
         extensions:
           basicauth/prw:
             client_auth:
               username: "{{ .Values.prometheus.username }}"
               password: "{{ .Values.prometheus.password }}"
-    {{- end }}
+      {{- end }}
         processors:
           attributes:
             actions:
@@ -73,18 +73,18 @@ spec:
         exporters:
           otlphttp/prometheus:
             endpoint: '{{ .Values.prometheus.endpoint }}/api/v1/otlp'
-    {{- if and .Values.prometheus.username .Values.prometheus.password }}
+      {{- if and .Values.prometheus.username .Values.prometheus.password }}
             auth:
               authenticator: basicauth/prw
-    {{- end }}
+      {{- end }}
             tls:
               insecure_skip_verify: "{{ .Values.prometheus.insecure }}"
         service:
           extensions:
           - health_check
-    {{- if and .Values.prometheus.username .Values.prometheus.password }}
+      {{- if and .Values.prometheus.username .Values.prometheus.password }}
           - basicauth/prw
-    {{- end }}
+      {{- end }}
           pipelines:
             metrics:
               receivers:
