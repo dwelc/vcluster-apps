@@ -23,15 +23,16 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
 
-      # Basic auth and TLS for remote write
-      extraArgs:
-        remoteWrite.basicAuth.username: "{{ .Values.prometheus.username }}"
-        remoteWrite.basicAuth.password: "{{ .Values.prometheus.password }}"
-        remoteWrite.tlsInsecureSkipVerify: "{{ .Values.prometheus.insecure }}"
-
       # Remote write to central Prometheus
       remoteWrite:
         - url: "{{ .Values.prometheus.endpoint }}/api/v1/write"
+      {{- if and .Values.prometheus.username .Values.prometheus.password }}
+          basicAuth.username: "{{ .Values.prometheus.username }}"
+          basicAuth.password: "{{ .Values.prometheus.password }}"
+      {{- end }}
+      {{- if .Values.prometheus.insecure }}
+          tlsInsecureSkipVerify: "true"
+      {{- end }}
           urlRelabelConfig:
             - action: replace
               replacement: "{{ .Values.loft.cluster }}"
@@ -70,7 +71,7 @@ spec:
               - role: node
             scheme: https
             tls_config:
-              insecure_skip_verify: "{{ .Values.prometheus.insecure }}"
+              insecure_skip_verify: {{ .Values.prometheus.insecure }}
             authorization:
               credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
             relabel_configs:
@@ -91,7 +92,7 @@ spec:
               - role: node
             scheme: https
             tls_config:
-              insecure_skip_verify: "{{ .Values.prometheus.insecure }}"
+              insecure_skip_verify: {{ .Values.prometheus.insecure }}
             authorization:
               credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
             metrics_path: /metrics/cadvisor
@@ -115,7 +116,7 @@ spec:
             scheme: https
             tls_config:
               ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-              insecure_skip_verify: "{{ .Values.prometheus.insecure }}"
+              insecure_skip_verify: {{ .Values.prometheus.insecure }}
             authorization:
               credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
             relabel_configs:
