@@ -17,8 +17,6 @@ spec:
       ---
       mode: daemonset
       presets:
-        # Disable kubeletMetrics preset - it uses hostname
-        # The prometheus receiver below scrapes kubelet metrics using InternalIP instead
         kubeletMetrics:
           enabled: false
         kubernetesAttributes:
@@ -56,7 +54,6 @@ spec:
               password: "{{ .Values.prometheus.password }}"
       {{- end }}
         receivers:
-          # Using prometheus receiver instead of kubeletstats - it uses InternalIP and bypasses DNS
           prometheus:
             config:
               scrape_configs:
