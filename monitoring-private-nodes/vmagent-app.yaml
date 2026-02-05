@@ -29,6 +29,8 @@ spec:
           basicAuth:
             username: "{{ .Values.prometheus.username }}"
             password: "{{ .Values.prometheus.password }}"
+          tlsConfig:
+            insecureSkipVerify: "{{ .Values.prometheus.insecure }}"
           urlRelabelConfig:
             - action: replace
               replacement: "{{ .Values.loft.cluster }}"
