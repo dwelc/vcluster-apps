@@ -30,9 +30,6 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
       config:
-        receivers:
-          kubeletstats:
-            insecure_skip_verify: "{{ .Values.prometheus.insecure }}"
         processors:
           attributes:
             actions:
