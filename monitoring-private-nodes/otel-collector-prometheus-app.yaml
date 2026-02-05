@@ -115,23 +115,6 @@ spec:
                       action: keep
                       regex: kubernetes;https
         processors:
-          attributes:
-            actions:
-            - action: upsert
-              key: loft_cluster_name
-              value: "{{ .Values.loft.cluster }}"
-            - action: upsert
-              key: loft_space_name
-              value: "{{ .Values.loft.space }}"
-            - action: upsert
-              key: loft_project_name
-              value: "{{ .Values.loft.project }}"
-            - action: upsert
-              key: loft_virtualcluster_name
-              value: "{{ .Values.loft.name }}"
-            - action: upsert
-              key: loft_user_name
-              value: "{{ .Values.loft.user.name }}"
           k8sattributes:
             auth_type: 'serviceAccount'
             extract:
