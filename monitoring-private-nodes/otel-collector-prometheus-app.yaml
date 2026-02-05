@@ -12,10 +12,12 @@ spec:
     chart:
       name: opentelemetry-collector
       repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
-      version: 0.80.1
+      version: 0.144.0
     values: | # yaml
       ---
       mode: daemonset
+      image:
+        repository: otel/opentelemetry-collector-contrib
       presets:
         kubeletMetrics:
           enabled: false
@@ -132,7 +134,7 @@ spec:
           transform:
             error_mode: ignore
             metric_statements:
-              context: datapoint
+            - context: datapoint
               statements:
               - 'set(attributes["k8s.node.name"], resource.attributes["k8s.node.name"])'
               - 'set(attributes["k8s.pod.name"], resource.attributes["k8s.pod.name"])'
@@ -152,7 +154,7 @@ spec:
               authenticator: basicauth/prw
       {{- end }}
             tls:
-              insecure_skip_verify: "{{ .Values.prometheus.insecure }}"
+              insecure_skip_verify: {{ .Values.prometheus.insecure }}
             # Use external_labels for loft labels (simpler than attributes processor for remote write)
             external_labels:
               loft_cluster_name: "{{ .Values.loft.cluster }}"
