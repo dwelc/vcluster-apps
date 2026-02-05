@@ -26,6 +26,9 @@ spec:
       # Remote write to central Prometheus
       remoteWrite:
         - url: "{{ .Values.prometheus.endpoint }}/api/v1/write"
+          basicAuth:
+            username: "{{ .Values.prometheus.username }}"
+            password: "{{ .Values.prometheus.password }}"
           urlRelabelConfig:
             - action: replace
               replacement: "{{ .Values.loft.cluster }}"
