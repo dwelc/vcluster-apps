@@ -5,7 +5,7 @@ Two vCluster Platform Apps that collect Kubernetes metrics from vClusters and pu
 ## Apps
 
 | App | File | Deploys to | Mode |
-|---|---|---|---|---|
+|---|---|---|---|
 | **OTEL Collector - Shared Nodes** | `otel-collector-shared-nodes-app.yaml` | Host cluster | Deployment (2 replicas) + Target Allocator |
 | **OTEL Collector - Private Nodes** | `otel-collector-private-nodes-app.yaml` | Inside vCluster | DaemonSet |
 
