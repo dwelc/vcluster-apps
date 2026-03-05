@@ -31,13 +31,100 @@ spec:
           autoGenerateCert:
             enabled: true
             recreate: true
+      # Post-install job removes DELETE validation webhooks that block app uninstallation (operator bug).
+      # The operator incorrectly denies DELETE operations on collector CRs in deployment+TA mode,
+      # which causes the chart's pre-delete cleanup job to fail and hang termination.
+      extraObjects:
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: patch-webhook-sa
+          annotations:
+            "helm.sh/hook": post-install,post-upgrade
+            "helm.sh/hook-weight": "1"
+            "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: otel-collector-shared-nodes-patch-webhook
+          annotations:
+            "helm.sh/hook": post-install,post-upgrade
+            "helm.sh/hook-weight": "1"
+            "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+        rules:
+        - apiGroups: ["admissionregistration.k8s.io"]
+          resources: ["validatingwebhookconfigurations"]
+          verbs: ["get", "patch"]
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: otel-collector-shared-nodes-patch-webhook
+          annotations:
+            "helm.sh/hook": post-install,post-upgrade
+            "helm.sh/hook-weight": "1"
+            "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+        subjects:
+        - kind: ServiceAccount
+          name: patch-webhook-sa
+          namespace: otel
+        roleRef:
+          kind: ClusterRole
+          name: otel-collector-shared-nodes-patch-webhook
+          apiGroup: rbac.authorization.k8s.io
+      - apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: patch-webhook
+          annotations:
+            "helm.sh/hook": post-install,post-upgrade
+            "helm.sh/hook-weight": "10"
+            "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+        spec:
+          template:
+            spec:
+              restartPolicy: Never
+              serviceAccountName: patch-webhook-sa
+              containers:
+              - name: patch
+                image: "bitnami/kubectl:latest"
+                command: ["bash", "-c"]
+                args:
+                - |
+                  WH="otel-collector-shared-nodes-opentelemetry-operator-validation"
+                  for i in $(seq 1 30); do kubectl get validatingwebhookconfiguration "$WH" >/dev/null 2>&1 && break; sleep 2; done
+                  # Build JSON patch to remove webhooks with "delete" in name (reverse order to preserve indices)
+                  PATCH=$(kubectl get validatingwebhookconfiguration "$WH" -o jsonpath='{range .webhooks[*]}{.name}{"\n"}{end}' \
+                    | awk '/delete/{print NR-1}' | sort -rn \
+                    | awk 'BEGIN{printf "["} NR>1{printf ","} {printf "{\"op\":\"remove\",\"path\":\"/webhooks/%d\"}",$1} END{printf "]"}')
+                  [ "$PATCH" = "[]" ] && exit 0
+                  echo "Removing DELETE webhooks: $PATCH"
+                  kubectl patch validatingwebhookconfiguration "$WH" --type=json -p="$PATCH"
       collectors:
+        # Disable the default DaemonSet collector
         daemon:
-          securityContext:
-            runAsUser: 0
+          enabled: false
+        # Deployment-mode collector with Target Allocator
+        cluster:
+          enabled: true
+          suffix: cluster
+          mode: deployment
+          replicas: 2
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          livenessProbe:
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 5
+          presets:
+            kubernetesAttributes:
+              enabled: true
           targetAllocator:
             enabled: true
-            allocationStrategy: per-node
+            allocationStrategy: consistent-hashing
             prometheusCR:
               enabled: true
               serviceMonitorSelector:
@@ -46,10 +133,41 @@ spec:
               podMonitorSelector: {}
           config:
             receivers:
-              kubeletstats:
-                insecure_skip_verify: true
-                auth_type: serviceAccount
+              prometheus:
+                config:
+                  scrape_configs:
+                    - job_name: 'kubelet-cadvisor'
+                      scrape_interval: 30s
+                      kubernetes_sd_configs:
+                        - role: node
+                      scheme: https
+                      tls_config:
+                        insecure_skip_verify: true
+                      authorization:
+                        credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                      metrics_path: /metrics/cadvisor
+                      relabel_configs:
+                        - source_labels: [__meta_kubernetes_node_address_InternalIP]
+                          target_label: __address__
+                          replacement: '$$1:10250'
+                        - action: labelmap
+                          regex: __meta_kubernetes_node_label_(.+)
+                        - source_labels: [__meta_kubernetes_node_name]
+                          target_label: node
             processors:
+              groupbyattrs:
+                keys:
+                - namespace
+                - pod
+                - node
+              transform/pre_enrich:
+                error_mode: ignore
+                metric_statements:
+                - context: resource
+                  statements:
+                  - 'set(attributes["k8s.namespace.name"], attributes["namespace"]) where attributes["namespace"] != nil'
+                  - 'set(attributes["k8s.pod.name"], attributes["pod"]) where attributes["pod"] != nil'
+                  - 'set(attributes["k8s.node.name"], attributes["node"]) where attributes["node"] != nil'
               k8sattributes:
                 auth_type: serviceAccount
                 passthrough: false
@@ -103,6 +221,10 @@ spec:
                   - 'set(attributes["vcluster.user"], resource.attributes["vcluster.user"])'
                   - 'set(attributes["vcluster.name"], resource.attributes["vcluster.name"])'
                   - 'set(attributes["vcluster.instance.project"], resource.attributes["vcluster.instance.project"])'
+              filter/vcluster_only:
+                metrics:
+                  datapoint:
+                  - 'resource.attributes["vcluster.name"] == nil'
               resource/add_cluster:
                 attributes:
                 - action: upsert
@@ -127,8 +249,10 @@ spec:
                   insecure_skip_verify: {{ .Values.prometheus.insecure }}
                 resource_to_telemetry_conversion:
                   enabled: true
-      {{- if and .Values.prometheus.username .Values.prometheus.password }}
             extensions:
+              health_check:
+                endpoint: 0.0.0.0:13133
+      {{- if and .Values.prometheus.username .Values.prometheus.password }}
               basicauth/prw:
                 client_auth:
                   username: "{{ .Values.prometheus.username }}"
@@ -141,23 +265,15 @@ spec:
               - basicauth/prw
       {{- end }}
               pipelines:
-                metrics/workload:
-                  receivers:
-                  - kubeletstats
-                  processors:
-                  - memory_limiter
-                  - k8sattributes
-                  - resource/add_cluster
-                  - transform
-                  - batch
-                  exporters:
-                  - prometheusremotewrite
-                metrics/controlplane:
+                metrics:
                   receivers:
                   - prometheus
                   processors:
                   - memory_limiter
+                  - groupbyattrs
+                  - transform/pre_enrich
                   - k8sattributes
+                  - filter/vcluster_only
                   - resource/add_cluster
                   - transform
                   - batch
@@ -167,20 +283,24 @@ spec:
   description: |
     OpenTelemetry Kube Stack for shared node vCluster monitoring on the host cluster.
 
-    Deploys the OTel Operator with Target Allocator to discover and scrape vcluster
-    ServiceMonitors (API server and controller-manager metrics) while handling
-    per-vcluster mTLS automatically.
+    Deploys a Deployment-mode OTel Collector (2 replicas) with Target Allocator
+    using consistent-hashing to distribute scrape targets across replicas.
 
-    Workload metrics: Uses kubeletstats receiver with k8sattributes processor to
-    automatically extract vcluster identity (project, space, user, vcluster name)
-    from existing platform labels on namespaces and pods.
+    Workload metrics: Scrapes cAdvisor /metrics/cadvisor via the Prometheus receiver
+    with kubernetes_sd_configs (node role). Uses standard Prometheus metric names
+    (container_cpu_usage_seconds_total, etc.). Non-vcluster metrics are filtered out
+    after enrichment via the filter/vcluster_only processor.
 
     Control plane metrics: Target Allocator discovers vcluster ServiceMonitors
-    (controlPlane.serviceMonitor.enabled: true) and scrapes API server and
-    controller-manager metrics. The k8sattributes processor enriches these with
-    vcluster identity labels from the pod's namespace.
+    (filtered by app=vcluster label) and scrapes API server and controller-manager
+    metrics with per-vcluster mTLS handled automatically.
+
+    Both metric types are enriched with vcluster identity labels at ingest time
+    via groupbyattrs + k8sattributes processors - no PromQL joins needed at query time.
 
     Prerequisites:
+    - Prometheus with remote write receiver enabled
+    - Kubelet scraping disabled in existing kube-prometheus-stack (kubelet.enabled: false)
     - vClusters must have controlPlane.serviceMonitor.enabled: true
     - Prometheus Operator CRDs must be installed (ServiceMonitor, PodMonitor)
     - Platform namespace labels (loft.sh/project, etc.) must exist
