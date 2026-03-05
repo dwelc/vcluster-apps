@@ -53,7 +53,7 @@ prometheus receiver
 ### Private Nodes
 
 ```
-Inside vCluster (dedicated nodes)
+Inside vCluster
 +-----------+     +-------------------+     +--------------------+
 | kubelet   |---->| OTel Collector    |---->| Prometheus         |
 | cAdvisor  |     | DaemonSet         |     | (remote write)     |
