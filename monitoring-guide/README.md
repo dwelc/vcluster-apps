@@ -4,10 +4,10 @@ Two vCluster Platform Apps that collect Kubernetes metrics from vClusters and pu
 
 ## Apps
 
-| App | File | Deploys to | Mode | Use when |
+| App | File | Deploys to | Mode |
 |---|---|---|---|---|
-| **OTEL Collector - Shared Nodes** | `otel-collector-shared-nodes-app.yaml` | Host cluster | Deployment (2 replicas) + Target Allocator | vClusters share nodes with other workloads |
-| **OTEL Collector - Private Nodes** | `otel-collector-private-nodes-app.yaml` | Inside vCluster | DaemonSet | vCluster has dedicated/private nodes |
+| **OTEL Collector - Shared Nodes** | `otel-collector-shared-nodes-app.yaml` | Host cluster | Deployment (2 replicas) + Target Allocator |
+| **OTEL Collector - Private Nodes** | `otel-collector-private-nodes-app.yaml` | Inside vCluster | DaemonSet |
 
 Both apps use standard Prometheus metric names (`container_cpu_usage_seconds_total`, etc.) for dashboard compatibility.
 
