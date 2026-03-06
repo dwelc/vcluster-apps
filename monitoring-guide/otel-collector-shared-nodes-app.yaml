@@ -137,7 +137,7 @@ spec:
                 config:
                   scrape_configs:
                     - job_name: 'kubelet-cadvisor'
-                      scrape_interval: 30s
+                      scrape_interval: 60s
                       kubernetes_sd_configs:
                         - role: node
                       scheme: https
