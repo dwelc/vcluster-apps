@@ -11,6 +11,8 @@ Two vCluster Platform Apps that collect Kubernetes metrics from vClusters and pu
 
 Both apps use standard Prometheus metric names (`container_cpu_usage_seconds_total`, etc.) for dashboard compatibility.
 
+Datadog variants of both apps (with `datadog` exporter, OOTB-dashboard-compatible tagging, hostname pinning, and a cardinality guard) live in [`datadog/`](./datadog/).
+
 ## How It Works
 
 ### Shared Nodes

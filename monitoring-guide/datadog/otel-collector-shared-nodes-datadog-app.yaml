@@ -157,6 +157,11 @@ spec:
                           regex: __meta_kubernetes_node_label_(.+)
                         - source_labels: [__meta_kubernetes_node_name]
                           target_label: node
+                    # Collector self-telemetry (powers Datadog's OTel Collector OOTB dashboard)
+                    - job_name: 'otelcol-self'
+                      scrape_interval: 30s
+                      static_configs:
+                        - targets: ['0.0.0.0:8888']
             processors:
               groupbyattrs:
                 keys:
@@ -185,27 +190,54 @@ spec:
                   - k8s.container.name
                   labels:
                   # Pod labels - vcluster syncer adds these to synced pods
-                  - tag_name: vcluster.virtual.namespace
+                  - tag_name: vcluster_virtual_namespace
                     key: vcluster.loft.sh/namespace
                     from: pod
                   # Namespace labels - platform adds these to vcluster namespaces
-                  - tag_name: vcluster.project
+                  - tag_name: vcluster_project
                     key: loft.sh/project
                     from: namespace
-                  - tag_name: vcluster.project.namespace
+                  - tag_name: vcluster_project_namespace
                     key: loft.sh/vcluster-instance-namespace
                     from: namespace
-                  - tag_name: vcluster.user
+                  - tag_name: vcluster_user
                     key: loft.sh/user
                     from: namespace
-                  - tag_name: vcluster.name
+                  - tag_name: vcluster_name
                     key: loft.sh/vcluster-instance-name
                     from: namespace
                   annotations:
                   # Pod annotations - identifies the virtual pod name
-                  - tag_name: vcluster.virtual.pod
+                  - tag_name: vcluster_virtual_pod
                     key: vcluster.loft.sh/name
                     from: pod
+              filter/vcluster_only:
+                metrics:
+                  datapoint:
+                  - 'resource.attributes["vcluster_name"] == nil and not IsMatch(metric.name, "^otelcol_")'
+              # Set k8s.cluster.name (becomes kube_cluster_name tag in Datadog) and the
+              # vcluster-specific cluster label. Without k8s.cluster.name, Datadog's
+              # OOTB Kubernetes dashboards do not populate.
+              resource/add_cluster:
+                attributes:
+                - action: upsert
+                  key: cluster
+                  value: "{{ .Values.loft.cluster }}"
+                - action: upsert
+                  key: k8s.cluster.name
+                  value: "{{ .Values.loft.cluster }}"
+              # Pin datadog.host.name per-payload:
+              # - workload metrics (cadvisor) -> the node the pod runs on
+              # - control-plane metrics (ServiceMonitor) -> a synthetic per-cluster host
+              # Without this, each collector replica registers as its own ephemeral host
+              # in Datadog's infra list ("every collector pod becomes a host").
+              transform/set_host:
+                error_mode: ignore
+                metric_statements:
+                - context: resource
+                  statements:
+                  - 'set(attributes["datadog.host.name"], attributes["k8s.node.name"]) where attributes["k8s.node.name"] != nil'
+                  - 'set(attributes["datadog.host.name"], "{{ .Values.loft.cluster }}-vcluster-cp") where attributes["k8s.node.name"] == nil'
               transform:
                 error_mode: ignore
                 metric_statements:
@@ -214,21 +246,24 @@ spec:
                   - 'set(attributes["k8s.node.name"], resource.attributes["k8s.node.name"])'
                   - 'set(attributes["k8s.pod.name"], resource.attributes["k8s.pod.name"])'
                   - 'set(attributes["k8s.namespace.name"], resource.attributes["k8s.namespace.name"])'
-                  - 'set(attributes["vcluster.virtual.pod"], resource.attributes["vcluster.virtual.pod"])'
-                  - 'set(attributes["vcluster.virtual.namespace"], resource.attributes["vcluster.virtual.namespace"])'
-                  - 'set(attributes["vcluster.project"], resource.attributes["vcluster.project"])'
-                  - 'set(attributes["vcluster.project.namespace"], resource.attributes["vcluster.project.namespace"])'
-                  - 'set(attributes["vcluster.user"], resource.attributes["vcluster.user"])'
-                  - 'set(attributes["vcluster.name"], resource.attributes["vcluster.name"])'
-              filter/vcluster_only:
-                metrics:
-                  datapoint:
-                  - 'resource.attributes["vcluster.name"] == nil'
-              resource/add_cluster:
-                attributes:
-                - action: upsert
-                  key: cluster
-                  value: "{{ .Values.loft.cluster }}"
+                  - 'set(attributes["vcluster_virtual_pod"], resource.attributes["vcluster_virtual_pod"])'
+                  - 'set(attributes["vcluster_virtual_namespace"], resource.attributes["vcluster_virtual_namespace"])'
+                  - 'set(attributes["vcluster_project"], resource.attributes["vcluster_project"])'
+                  - 'set(attributes["vcluster_project_namespace"], resource.attributes["vcluster_project_namespace"])'
+                  - 'set(attributes["vcluster_user"], resource.attributes["vcluster_user"])'
+                  - 'set(attributes["vcluster_name"], resource.attributes["vcluster_name"])'
+              # Cardinality guard: drop high-cardinality labels and cap resource attributes
+              # to the set we actually query. Datadog bills per (metric name x unique tagset),
+              # so unfiltered cadvisor/kubelet/apiserver series blow up custom-metrics cost.
+              transform/cardinality_guard:
+                error_mode: ignore
+                metric_statements:
+                - context: datapoint
+                  statements:
+                  - 'delete_matching_keys(attributes, "^(id|image|name|kernelVersion|osVersion|interface|boot_id|machine_id|system_uuid)$")'
+                - context: resource
+                  statements:
+                  - 'keep_keys(attributes, ["k8s.cluster.name","k8s.namespace.name","k8s.deployment.name","k8s.pod.name","k8s.node.name","k8s.container.name","container.image.tag","vcluster_name","vcluster_project","vcluster_project_namespace","vcluster_user","vcluster_virtual_namespace","vcluster_virtual_pod","cluster","datadog.host.name","host.name","cloud.region","cloud.provider"])'
               memory_limiter:
                 check_interval: 1s
                 limit_percentage: 75
@@ -242,6 +277,17 @@ spec:
                 api:
                   key: ${env:DD_API_KEY}
                   site: "{{ .Values.datadog.site }}"
+                host_metadata:
+                  enabled: true
+                  hostname_source: config_or_system
+                metrics:
+                  histograms:
+                    mode: distributions
+                    send_aggregation_metrics: true
+                  sums:
+                    cumulative_monotonic_mode: to_delta
+                  summaries:
+                    mode: gauges
             extensions:
               health_check:
                 endpoint: 0.0.0.0:13133
@@ -259,7 +305,9 @@ spec:
                   - k8sattributes
                   - filter/vcluster_only
                   - resource/add_cluster
+                  - transform/set_host
                   - transform
+                  - transform/cardinality_guard
                   - batch
                   exporters:
                   - datadog
@@ -279,10 +327,23 @@ spec:
     (filtered by app=vcluster label) and scrapes API server and controller-manager
     metrics with per-vcluster mTLS handled automatically.
 
+    Collector self-telemetry: Scrapes 0.0.0.0:8888 to drive Datadog's OOTB
+    OpenTelemetry Collector dashboard.
+
     All metrics are enriched with vcluster identity labels at ingest time via
-    groupbyattrs + k8sattributes processors. The cluster label is set automatically
-    from {{ .Values.loft.cluster }}. Metrics are exported to Datadog via the OTel
-    Datadog exporter.
+    groupbyattrs + k8sattributes processors. The cluster and k8s.cluster.name
+    attributes are set from {{ .Values.loft.cluster }}; k8s.cluster.name becomes
+    the kube_cluster_name tag that Datadog's OOTB Kubernetes dashboards group by.
+
+    The transform/set_host processor pins datadog.host.name per-payload so collector
+    replicas do not register as ephemeral hosts in Datadog's infrastructure list.
+
+    The transform/cardinality_guard processor drops high-cardinality labels and
+    restricts resource attributes to the set used by queries, capping custom-metrics
+    billing cost. Combine with Metrics without Limits (Datadog UI) for further control.
+
+    Metrics are exported to Datadog via the OTel Datadog exporter with histograms
+    pinned to distributions mode (required for server-side percentile queries).
 
     Prerequisites:
     - Datadog account with API key
