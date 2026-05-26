@@ -1,0 +1,66 @@
+# vcluster.yaml snippet — same as vcluster-annotation-snippet.yaml but with
+# SA-token authentication instead of relying on a system:anonymous binding.
+#
+# CRITICAL GOTCHA — DO NOT use `bearer_token_auth: true` with `bearer_token_path`
+# pointing to a custom token file. The bearer_token_auth field in the OpenMetrics
+# v2 check is hardwired to the kubelet's own SA token; it ignores
+# bearer_token_path. The check returns 403 even when the token at the path is
+# valid (verified by curl from inside the same agent pod). Use the auth_token
+# block instead, as shown below.
+#
+# Validated:
+#   - 403 (anonymous denied) -> 200 (token authenticated)
+#   - ~3,800 metric samples per scrape from a vcluster apiserver /metrics
+#
+# The literal string "Bearer <TOKEN>" in `value` is a template — the agent
+# reads the file from `reader.path` and substitutes the file's content for
+# `<TOKEN>` at runtime.
+#
+# Container name `syncer` is correct for vCluster v0.20+. Verify older
+# versions with:
+#   kubectl get sts -n <vc-ns> <vc-name> -o jsonpath='{.spec.template.spec.containers[*].name}'
+
+controlPlane:
+  statefulSet:
+    pods:
+      annotations:
+        ad.datadoghq.com/syncer.checks: |
+          {
+            "openmetrics": {
+              "instances": [
+                {
+                  "openmetrics_endpoint": "https://%%host%%:8443/metrics",
+                  "namespace": "vcluster",
+                  "metrics": [
+                    "apiserver_request_total",
+                    "apiserver_request_duration_seconds",
+                    "apiserver_current_inflight_requests",
+                    "apiserver_flowcontrol_current_inqueue_requests",
+                    "apiserver_longrunning_requests",
+                    "etcd_request_duration_seconds",
+                    "etcd_request_errors_total",
+                    "rest_client_requests_total",
+                    "workqueue_depth",
+                    "workqueue_adds_total",
+                    "workqueue_queue_duration_seconds",
+                    "process_cpu_seconds_total",
+                    "process_resident_memory_bytes"
+                  ],
+                  "auth_token": {
+                    "reader": {
+                      "type": "file",
+                      "path": "/etc/datadog-agent/vcluster-tokens/<vc-name>"
+                    },
+                    "writer": {
+                      "type": "header",
+                      "name": "Authorization",
+                      "value": "Bearer <TOKEN>"
+                    }
+                  },
+                  "tls_verify": false,
+                  "send_distribution_buckets": true,
+                  "max_returned_metrics": 5000
+                }
+              ]
+            }
+          }

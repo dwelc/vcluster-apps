@@ -1,0 +1,42 @@
+# DatadogAgent CR override that mounts the host-side mirrored Secret onto the
+# Node Agent so the OpenMetrics check can read the token at scrape time.
+#
+# Merge this into your existing DatadogAgent CR (see datadog-agent-cr.yaml).
+#
+# For multiple vclusters: add one `projected.sources` entry per vcluster, each
+# writing to a different `path:` under /etc/datadog-agent/vcluster-tokens/.
+#
+# After this is applied, the file
+#   /etc/datadog-agent/vcluster-tokens/<vcluster-name>
+# is readable inside every Node Agent pod and can be referenced by the
+# OpenMetrics check's auth_token block (see vcluster-annotation-with-auth.yaml).
+spec:
+  override:
+    nodeAgent:
+      volumes:
+      - name: vcluster-tokens
+        projected:
+          sources:
+          - secret:
+              name: <vc-name>-vcluster-token
+              items:
+              - key: token
+                path: <vc-name>
+          # Add more vclusters here:
+          # - secret:
+          #     name: tenant-1-vcluster-token
+          #     items:
+          #     - key: token
+          #       path: tenant-1
+          # - secret:
+          #     name: tenant-2-vcluster-token
+          #     items:
+          #     - key: token
+          #       path: tenant-2
+
+      containers:
+        agent:
+          volumeMounts:
+          - name: vcluster-tokens
+            mountPath: /etc/datadog-agent/vcluster-tokens
+            readOnly: true

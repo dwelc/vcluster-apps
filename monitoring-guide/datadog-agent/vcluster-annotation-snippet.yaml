@@ -1,0 +1,51 @@
+# vcluster.yaml snippet — adds Datadog Agent autodiscovery annotation to the
+# vcluster control plane StatefulSet pods.
+#
+# Apply this block to each vcluster.yaml. Content is identical across vclusters;
+# the Datadog Agent fills in pod-specific values via %%host%% at autodiscovery
+# time.
+#
+# Triggers a rolling restart of the vcluster control plane StatefulSet (~10-30s
+# of vcluster apiserver downtime for single-replica; zero downtime for HA).
+#
+# Container name `syncer` is correct for vCluster v0.20+. For older versions,
+# verify with:
+#   kubectl get sts -n <vc-ns> <vc-name> -o jsonpath='{.spec.template.spec.containers[*].name}'
+#
+# This form assumes /metrics is reachable WITHOUT auth (e.g., the customer's
+# system:anonymous binding is in place). For the SA-token-authenticated form,
+# see vcluster-annotation-with-auth.yaml.
+
+controlPlane:
+  statefulSet:
+    pods:
+      annotations:
+        ad.datadoghq.com/syncer.checks: |
+          {
+            "openmetrics": {
+              "instances": [
+                {
+                  "openmetrics_endpoint": "https://%%host%%:8443/metrics",
+                  "namespace": "vcluster",
+                  "metrics": [
+                    "apiserver_request_total",
+                    "apiserver_request_duration_seconds",
+                    "apiserver_current_inflight_requests",
+                    "apiserver_flowcontrol_current_inqueue_requests",
+                    "apiserver_longrunning_requests",
+                    "etcd_request_duration_seconds",
+                    "etcd_request_errors_total",
+                    "rest_client_requests_total",
+                    "workqueue_depth",
+                    "workqueue_adds_total",
+                    "workqueue_queue_duration_seconds",
+                    "process_cpu_seconds_total",
+                    "process_resident_memory_bytes"
+                  ],
+                  "tls_verify": false,
+                  "send_distribution_buckets": true,
+                  "max_returned_metrics": 5000
+                }
+              ]
+            }
+          }

@@ -1,0 +1,65 @@
+# Datadog Agent Helm chart values — when installing via `helm install datadog/datadog`
+# (no Datadog Operator).
+#
+# Same effect as datadog-agent-cr.yaml. Use this form if the customer doesn't
+# run the Datadog Operator.
+#
+# After apply: rolling-restart the Node Agent DaemonSet for new env vars to
+# attach to metrics. Tags only appear on metrics ingested AFTER the restart.
+datadog:
+  # Becomes kube_cluster_name on every metric.
+  clusterName: <your-host-cluster-name>
+
+  site: datadoghq.com
+
+  apiKeyExistingSecret: datadog-api-secret
+
+  # Synced workload pods carry these from the vcluster syncer.
+  podLabelsAsTags:
+    vcluster.loft.sh/namespace: vcluster_virtual_namespace
+    vcluster.loft.sh/managed-by: vcluster_name
+
+  podAnnotationsAsTags:
+    vcluster.loft.sh/name: vcluster_virtual_pod
+
+  # Platform-managed labels on the vcluster's host namespace.
+  namespaceLabelsAsTags:
+    loft.sh/vcluster-instance-name: vcluster_name
+    loft.sh/project: vcluster_project
+    loft.sh/user: vcluster_user
+    loft.sh/vcluster-instance-namespace: vcluster_project_namespace
+
+  # Enable Prometheus annotation autodiscovery (ad.datadoghq.com/<container>.checks).
+  prometheusScrape:
+    enabled: true
+    enableServiceEndpoints: true
+
+# Equivalent raw env-var form, if for some reason the chart values above
+# aren't honored (older chart versions, custom forks, etc.).
+# Uncomment and apply under `agents.containers.agent.env`:
+#
+# agents:
+#   containers:
+#     agent:
+#       env:
+#         - name: DD_CLUSTER_NAME
+#           value: "<your-host-cluster-name>"
+#         - name: DD_KUBERNETES_POD_LABELS_AS_TAGS
+#           value: |
+#             {
+#               "vcluster.loft.sh/namespace": "vcluster_virtual_namespace",
+#               "vcluster.loft.sh/managed-by": "vcluster_name"
+#             }
+#         - name: DD_KUBERNETES_POD_ANNOTATIONS_AS_TAGS
+#           value: |
+#             {
+#               "vcluster.loft.sh/name": "vcluster_virtual_pod"
+#             }
+#         - name: DD_KUBERNETES_NAMESPACE_LABELS_AS_TAGS
+#           value: |
+#             {
+#               "loft.sh/vcluster-instance-name": "vcluster_name",
+#               "loft.sh/project": "vcluster_project",
+#               "loft.sh/user": "vcluster_user",
+#               "loft.sh/vcluster-instance-namespace": "vcluster_project_namespace"
+#             }

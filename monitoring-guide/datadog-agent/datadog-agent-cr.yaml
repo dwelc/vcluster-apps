@@ -1,0 +1,66 @@
+# DatadogAgent Custom Resource — applied via the Datadog Operator.
+# Validated against datadog-operator chart v2.21.1 (Operator v1.25.0, Agent v7.77.2).
+#
+# This is the form to use when the customer installs Datadog via the Datadog
+# Operator. For the Helm-values form (no operator), see datadog-agent-helm-values.yaml.
+#
+# After apply: rolling-restart the Node Agent DaemonSet for new env vars to attach
+# to metrics. Tags only appear on metrics ingested AFTER the restart.
+---
+apiVersion: datadoghq.com/v2alpha1
+kind: DatadogAgent
+metadata:
+  name: datadog
+  namespace: datadog
+spec:
+  global:
+    # Becomes kube_cluster_name on every metric — required for OOTB Kubernetes
+    # dashboards to populate.
+    clusterName: <your-host-cluster-name>
+
+    site: datadoghq.com
+
+    credentials:
+      apiSecret:
+        secretName: datadog-api-secret
+        keyName: api-key
+
+    # Synced workload pods carry these from the vcluster syncer:
+    #   vcluster.loft.sh/namespace  — the virtual namespace inside the vcluster
+    #   vcluster.loft.sh/managed-by — the vcluster name (= loft.sh/vcluster-instance-name)
+    podLabelsAsTags:
+      vcluster.loft.sh/namespace: vcluster_virtual_namespace
+      vcluster.loft.sh/managed-by: vcluster_name
+
+    # Synced workload pods carry this annotation:
+    #   vcluster.loft.sh/name — the virtual pod name inside the vcluster
+    podAnnotationsAsTags:
+      vcluster.loft.sh/name: vcluster_virtual_pod
+
+    # Platform-managed labels on the vcluster's host namespace:
+    namespaceLabelsAsTags:
+      loft.sh/vcluster-instance-name: vcluster_name
+      loft.sh/project: vcluster_project
+      loft.sh/user: vcluster_user
+      loft.sh/vcluster-instance-namespace: vcluster_project_namespace
+
+  features:
+    # Enable Prometheus annotation autodiscovery so the Agent picks up
+    # ad.datadoghq.com/<container>.checks annotations on pods.
+    prometheusScrape:
+      enabled: true
+      enableServiceEndpoints: true
+
+    orchestratorExplorer:
+      enabled: true
+
+  override:
+    nodeAgent:
+      tolerations:
+      - operator: Exists
+      env:
+      - name: DD_KUBELET_TLS_VERIFY
+        value: "false"
+
+    clusterAgent:
+      replicas: 1

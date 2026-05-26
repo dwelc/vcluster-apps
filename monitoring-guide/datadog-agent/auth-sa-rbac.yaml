@@ -1,0 +1,58 @@
+# Applied INSIDE each vcluster (not on the host cluster).
+#
+# Creates:
+#   - ServiceAccount in kube-system
+#   - ClusterRole granting GET /metrics and /controller-manager/metrics
+#   - ClusterRoleBinding mapping the SA to the ClusterRole
+#   - long-lived token Secret bound to the SA
+#
+# Apply via:
+#   kubectl --context <vcluster-context> apply -f auth-sa-rbac.yaml
+#
+# Then extract the token to a host-cluster Secret in the Datadog Agent's
+# namespace:
+#   TOKEN=$(kubectl --context <vcluster-context> get secret -n kube-system datadog-metrics-reader-token -o jsonpath='{.data.token}' | base64 -d)
+#   kubectl --context <host-context> -n datadog create secret generic <vc-name>-vcluster-token --from-literal=token="$TOKEN"
+#
+# Note: the kubernetes.io/service-account-token Secret type still works in all
+# current Kubernetes versions but is "soft-deprecated" since 1.24 in favor of
+# projected short-lived tokens. For the Datadog Agent's external-consumer use
+# case (no TokenRequest API integration), long-lived tokens remain the
+# practical choice. The token doesn't rotate — treat its export path as a
+# credential.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: datadog-metrics-reader
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: datadog-metrics-reader
+rules:
+- nonResourceURLs: ["/metrics", "/controller-manager/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: datadog-metrics-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: datadog-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: datadog-metrics-reader
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: datadog-metrics-reader-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: datadog-metrics-reader
+type: kubernetes.io/service-account-token
