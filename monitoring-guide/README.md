@@ -13,6 +13,8 @@ Both apps use standard Prometheus metric names (`container_cpu_usage_seconds_tot
 
 Datadog variants of both apps (with `datadog` exporter, OOTB-dashboard-compatible tagging, hostname pinning, and a cardinality guard) live in [`datadog/`](./datadog/).
 
+For the **Datadog Agent + autodiscovery annotations** path (no OTel collector — for customers already running the Datadog Agent fleet who don't want a parallel pipeline), see [`datadog-agent/`](./datadog-agent/).
+
 ## How It Works
 
 ### Shared Nodes
