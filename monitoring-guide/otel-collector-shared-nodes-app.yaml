@@ -40,16 +40,18 @@ spec:
         metadata:
           name: patch-webhook-sa
           annotations:
-            "helm.sh/hook": post-install,post-upgrade
-            "helm.sh/hook-weight": "1"
+            # RBAC for the patch Job — must materialise before it (weight -20 < -10)
+            "helm.sh/hook": post-install,post-upgrade,pre-delete
+            "helm.sh/hook-weight": "-20"
             "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
       - apiVersion: rbac.authorization.k8s.io/v1
         kind: ClusterRole
         metadata:
           name: otel-collector-shared-nodes-patch-webhook
           annotations:
-            "helm.sh/hook": post-install,post-upgrade
-            "helm.sh/hook-weight": "1"
+            # RBAC for the patch Job — must materialise before it (weight -20 < -10)
+            "helm.sh/hook": post-install,post-upgrade,pre-delete
+            "helm.sh/hook-weight": "-20"
             "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
         rules:
         - apiGroups: ["admissionregistration.k8s.io"]
@@ -60,13 +62,14 @@ spec:
         metadata:
           name: otel-collector-shared-nodes-patch-webhook
           annotations:
-            "helm.sh/hook": post-install,post-upgrade
-            "helm.sh/hook-weight": "1"
+            # RBAC for the patch Job — must materialise before it (weight -20 < -10)
+            "helm.sh/hook": post-install,post-upgrade,pre-delete
+            "helm.sh/hook-weight": "-20"
             "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
         subjects:
         - kind: ServiceAccount
           name: patch-webhook-sa
-          namespace: otel
+          namespace: '{{ .Release.Namespace }}'   # was hardcoded `otel` — broke when App moved to monitoring
         roleRef:
           kind: ClusterRole
           name: otel-collector-shared-nodes-patch-webhook
@@ -76,8 +79,10 @@ spec:
         metadata:
           name: patch-webhook
           annotations:
-            "helm.sh/hook": post-install,post-upgrade
-            "helm.sh/hook-weight": "10"
+            # pre-delete needed because the operator may not register webhooks in time at post-install.
+            # weight -10 runs before the chart's pre-delete-job (weight 0).
+            "helm.sh/hook": post-install,post-upgrade,pre-delete
+            "helm.sh/hook-weight": "-10"
             "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
         spec:
           template:
@@ -91,12 +96,19 @@ spec:
                 args:
                 - |
                   WH="otel-collector-shared-nodes-opentelemetry-operator-validation"
-                  for i in $(seq 1 30); do kubectl get validatingwebhookconfiguration "$WH" >/dev/null 2>&1 && break; sleep 2; done
-                  # Build JSON patch to remove webhooks with "delete" in name (reverse order to preserve indices)
-                  PATCH=$(kubectl get validatingwebhookconfiguration "$WH" -o jsonpath='{range .webhooks[*]}{.name}{"\n"}{end}' \
+                  # Wait up to 5 min for the operator to register its *delete* webhooks.
+                  for i in $(seq 1 150); do
+                    kubectl get validatingwebhookconfiguration "$WH" \
+                      -o jsonpath='{range .webhooks[*]}{.name}{"\n"}{end}' 2>/dev/null \
+                      | grep -q delete && break
+                    sleep 2
+                  done
+                  # JSON patch removes every *delete* webhook (reverse-indexed).
+                  PATCH=$(kubectl get validatingwebhookconfiguration "$WH" \
+                    -o jsonpath='{range .webhooks[*]}{.name}{"\n"}{end}' 2>/dev/null \
                     | awk '/delete/{print NR-1}' | sort -rn \
                     | awk 'BEGIN{printf "["} NR>1{printf ","} {printf "{\"op\":\"remove\",\"path\":\"/webhooks/%d\"}",$1} END{printf "]"}')
-                  [ "$PATCH" = "[]" ] && exit 0
+                  [ -z "$PATCH" ] || [ "$PATCH" = "[]" ] && exit 0
                   echo "Removing DELETE webhooks: $PATCH"
                   kubectl patch validatingwebhookconfiguration "$WH" --type=json -p="$PATCH"
       collectors:
@@ -152,8 +164,35 @@ spec:
                           replacement: '$$1:10250'
                         - action: labelmap
                           regex: __meta_kubernetes_node_label_(.+)
+                        # Drop NFD's 100+ feature.node.kubernetes.io/* labels — blows past prom max-labels.
+                        - action: labeldrop
+                          regex: feature_node_kubernetes_io_.*
                         - source_labels: [__meta_kubernetes_node_name]
                           target_label: node
+              # Separate receiver for vCluster Platform's own /metrics. Static discovery,
+              # outside the Target Allocator (the TA is selecting app=vcluster, this isn't).
+              # Routed through its own pipeline below so it bypasses k8sattributes +
+              # filter/vcluster_only (platform metrics have no tenant identity).
+              prometheus/platform:
+                config:
+                  scrape_configs:
+                    - job_name: 'loft-platform'
+                      scrape_interval: 60s
+                      scrape_timeout: 30s
+                      kubernetes_sd_configs:
+                        - role: endpoints
+                          namespaces:
+                            names: [vcluster-platform]
+                      relabel_configs:
+                        - source_labels: [__meta_kubernetes_service_label_loft_sh_service]
+                          regex: loft
+                          action: keep
+                        - source_labels: [__meta_kubernetes_endpoint_port_name]
+                          regex: http
+                          action: keep
+                      scheme: http
+                      authorization:
+                        credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
             processors:
               groupbyattrs:
                 keys:
@@ -272,6 +311,17 @@ spec:
                   - filter/vcluster_only
                   - resource/add_cluster
                   - transform
+                  - batch
+                  exporters:
+                  - prometheusremotewrite
+                # Platform metrics are not tenant-tagged; they describe the platform itself.
+                # Skip k8sattributes (nothing to enrich) and filter/vcluster_only (would drop them).
+                metrics/platform:
+                  receivers:
+                  - prometheus/platform
+                  processors:
+                  - memory_limiter
+                  - resource/add_cluster
                   - batch
                   exporters:
                   - prometheusremotewrite
