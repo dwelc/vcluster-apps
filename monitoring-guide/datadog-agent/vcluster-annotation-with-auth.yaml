@@ -1,7 +1,7 @@
 # vcluster.yaml snippet — same as vcluster-annotation-snippet.yaml but with
 # SA-token authentication instead of relying on a system:anonymous binding.
 #
-# CRITICAL GOTCHA — DO NOT use `bearer_token_auth: true` with `bearer_token_path`
+# DO NOT use `bearer_token_auth: true` with `bearer_token_path`
 # pointing to a custom token file. The bearer_token_auth field in the OpenMetrics
 # v2 check is hardwired to the kubelet's own SA token; it ignores
 # bearer_token_path. The check returns 403 even when the token at the path is
@@ -15,10 +15,6 @@
 # The literal string "Bearer <TOKEN>" in `value` is a template — the agent
 # reads the file from `reader.path` and substitutes the file's content for
 # `<TOKEN>` at runtime.
-#
-# Container name `syncer` is correct for vCluster v0.20+. Verify older
-# versions with:
-#   kubectl get sts -n <vc-ns> <vc-name> -o jsonpath='{.spec.template.spec.containers[*].name}'
 
 controlPlane:
   statefulSet:

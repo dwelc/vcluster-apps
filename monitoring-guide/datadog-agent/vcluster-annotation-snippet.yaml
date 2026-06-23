@@ -8,10 +8,6 @@
 # Triggers a rolling restart of the vcluster control plane StatefulSet (~10-30s
 # of vcluster apiserver downtime for single-replica; zero downtime for HA).
 #
-# Container name `syncer` is correct for vCluster v0.20+. For older versions,
-# verify with:
-#   kubectl get sts -n <vc-ns> <vc-name> -o jsonpath='{.spec.template.spec.containers[*].name}'
-#
 # This form assumes /metrics is reachable WITHOUT auth (e.g., the customer's
 # system:anonymous binding is in place). For the SA-token-authenticated form,
 # see vcluster-annotation-with-auth.yaml.
